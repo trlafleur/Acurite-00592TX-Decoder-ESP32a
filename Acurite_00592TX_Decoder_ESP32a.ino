@@ -7,33 +7,18 @@
  *  sent approximately every 18 seconds. Their are three sensor
  *  ID's: A, B and C
  *  
- * This device is also known as 00592TX, 06002M and 06044 and 
+ *  This device is also known as 00592TX, 06002M and 06044 and 
  *  as other devices...
  *  
- *  Part of this code is derived from informationthe below listed sites:
- *    https://github.com/yacko1975/WeatherStation
- * Decoding protocol and prototype code from these sources:
- * Ray Wang (Rayshobby LLC) 
- *   http://rayshobby.net/?p=8998
- * Benjamin Larsson (RTL_433) 
- *   https://github.com/merbanan/rtl_433
- * Brad Hunting (Acurite_00592TX_sniffer) 
- *   https://github.com/bhunting/Acurite_00592TX_sniffer
- *      
- * The 00592TX typically only sends one SYNC pulse + DATA stream
- * per temperature reading. Infrequently two sync/data streams
- * are sent during the same transmit window but that seems to 
- * be the exception.
+ * The 00592TX typically sends three SYNC pulse + DATA stream
+ * per temperature reading. 
  * 
  * The 00592TX usually starts the data sync bits right after
  * the RF sync pulses which are random length and polarity.
  *
- * Do not rely on a dead/mark time at the beginning of the 
- * data sync stream.
- *
- * The 00592TX first emits a seemingly random length string of 
+ * The 00592TX first emits a random length string of 
  * random width hi/lo pulses, most like to provide radio
- * radio synchronization.
+ * radio AGC synchronization.
  *
  * The probe then emits 4 data sync pulses of approximately 50% 
  * duty cycle and 1.2 ms period. The sync pulses start with a 
@@ -74,11 +59,11 @@
  *   00 = channel C   --> Extra
  *   
  *   The remaining 6 bits of the first byte and the 8 bits of the second
- *   byte are a unique identifier per device. If you need more that 3 devices
+ *   byte are a unique identifier per device. If you need more that 3 
  *   adding a check by serial number could expand this gateway.
  *   
  * The next byte seems to always be 0x44, for all of
- *   the probes I have tested.
+ *   the probes I have tested (a sample of 6 probes).
  *   
  * The next byte is humidity and is encoded as the
  *   lower 7 bits
@@ -109,7 +94,7 @@
  *     Alarms for emperature and Low Battery
  *    
  *  E-Mail:
- *    If enable, alarms are also send via E-mail or SMS
+ *    If enable, alarms are also send via E-mail or SMS, requires MQTT for now
  *     http://www.emailtextmessages.com/
  *  
  *  Integration time for alarms can be set for each sensor.     
@@ -140,11 +125,11 @@
  *          2)  Testing with a 433Mhz RFM69 
  *                RFM69OOK lib from https://github.com/kobuki/RFM69OOK
  *                DIO2 connected to pin interrupt pin.
- *          3)  Tested with a RXB6 receiver connected to interrupt pin.
+ *          3)  Tested with a RXB6 and Aurel RX-MID receivers
  *          4)  Tested using a TTGO R1 ESP32 module
  *          5)  ESP32 and ESP8266 supported sending data via MQTT and E-Mail
  *          6)  ESP8266 tested with a NodeMCU 1.0
- *          7)  Added E-mail-SMS Support NOTE: You must edit Gsender.h with your info
+ *          7)  Added E-mail-SMS Support NOTE:You must edit Gsender.h with your E-mail info
  *          8)
  *          
  *  Todo:   1) Fix issues with RFM69 receiver, work in progress, not working
@@ -232,11 +217,11 @@
 
   // WiFi information
   // change it with your ssid-password
-  const char* ssid = "MySSID";                 // <----------- Change This
-  const char* password = "MyPass";       // <----------- Change This
-  
+  const char* ssid = "MySSID";                    // <----------- Change This
+  const char* password = "MyPass";                // <----------- Change This
+    
 #ifdef IF_EMAIL
-   const char* MySendToAddress = "MyEmail";                                 // <----------- Change This for E-Mail
+   const char* MySendToAddress = "MyEmail";                                            // <----------- Change This for E-Mail
 // const char* MySendToAddress = "MyPhone@vtext.com";                                  // <----------- Change This for SMS
 //      For SMS format, see -->   http://www.emailtextmessages.com/
 #endif
@@ -248,7 +233,7 @@
     #include <PubSubClient.h>
    
     // MQTT Server IP Address or FQDN
-    const char* mqtt_server = "192.168.167.32";    // <----------- Change This
+    const char* mqtt_server = "192.168.167.32";     // <----------- Change This
   
     // create an instance of PubSubClient client 
     PubSubClient client(espClient);
@@ -296,25 +281,25 @@
 
 
 // create an instance for Moving Average
-  MovingAverage <float> AAVD (60);        // create a moving average over last n values         // <----------- Change This as needed
+  MovingAverage <float> AAVD (60);        // create a moving average over last n values         // <----------- Change These as needed
   MovingAverage <float> BAVD (60);        // 60 * ~18  sec = 1080sec = 18min
-  MovingAverage <float> CAVD (60);        // 60 * ~18  sec = 1080sec = 18min
+  MovingAverage <float> CAVD (60);
 
-  #define MAX_ATEMP     42              // Max temperature for refrigerator, device A           // <----------- Change This as needed
-  #define MAX_BTEMP     25              // Max temperature for freezer, device B
-  #define MAX_CTEMP     99              // Max temperature for device C
+  #define MAX_ATEMP     45                // Max temperature for refrigerator, device A           // <----------- Change Theses as needed
+  #define MAX_BTEMP     20                // Max temperature for freezer, device B
+  #define MAX_CTEMP     99                // Max temperature for device C
     
   #define AlarmTimeToWait          120L             // Wait this amount of time for next alarm message, in Minutes  // <----------- Change These as needed
-  #define BattAlarmTimeToWait     1440L             // Wait this amount of time for next alarm message, in Minutes
+  #define BattAlarmTimeToWait     1440L             // Wait this amount of time for next battery alarm message, in Minutes
   
   unsigned long LastTimeA  = 0;                     // This is ID: A, used for the refrigerator
-  unsigned long LastTimeB  = 0;                     // This is ID: B, used for the Freezer
+  unsigned long LastTimeB  = 0;                     // This is ID: B, used for the freezer
   unsigned long LastTimeC  = 0;                     // This is ID: C, Extra unit
-  unsigned long LastTimeBatt = 0;
+  unsigned long LastTimeBatt = 0;                   // Low battery
   
   bool A_Flag = false;                              // This is ID: A, used for the refrigerator
-  bool B_Flag = false;                              // This is ID: B, used for the Freezer
-  bool C_Flag = false;                              // This is ID: V, Extra unit
+  bool B_Flag = false;                              // This is ID: B, used for the freezer
+  bool C_Flag = false;                              // This is ID: C, Extra unit
   bool Batt_Flag = false;                           // This is low battery flag
   
   unsigned long currentMillis = 0;                  // a 1 Minute clock timer
@@ -323,10 +308,10 @@
   unsigned long Minute = 0;
   
   unsigned long BlockFailCounter  = 0;
-  unsigned long CRCFailCounter    = 0;
+  unsigned long CSFailCounter    = 0;
   
-  char msg[60];                                // char string buffer
-  char msg1[60];                               // char string buffer
+  char msg [60];                              // char string buffer
+  char msg1[60];                              // char string buffer
 
 /* ************************************************************* */
 #define SYNCPULSECNT      4                   // 4 sync pulses (8 edges)
@@ -422,7 +407,7 @@ void init_display(void)
     if ((char)payload[0] == 'R') 
     {
       Serial.println("Reset Received");
-      // Here we have the Min-Max for each sensor
+      // reset the Min-Max for each sensor
       AMinTemp = 158;                         // Max temp is 158deg
       AMaxTemp = -40;
       BMinTemp = 158;                         // Max temp is 158deg
@@ -521,9 +506,9 @@ void Awaits()
 
  /* ************************************************************* */
  /*
- * code to print formatted hex 
+ *    Will print 8-bit formatted hex
  */
-void PrintHex8(uint8_t *data, uint8_t length) // prints 8-bit data in hex
+void PrintHex8(uint8_t *data, uint8_t length) 
 {
    char tmp[length*2+1];
    byte first;
@@ -541,13 +526,13 @@ void PrintHex8(uint8_t *data, uint8_t length) // prints 8-bit data in hex
        j++;
      }
    tmp[length*2] = 0;
-   Serial.print("0X");
+   Serial.print("0x");
    Serial.print(tmp);
 }
 
 
 ///* ************************************************************* */
-// Checksum of bits
+//    Checksum of bits
 uint8_t CheckSum(uint8_t const message[], unsigned nBytes) 
 {
     unsigned int sum = 0;
@@ -560,13 +545,14 @@ uint8_t CheckSum(uint8_t const message[], unsigned nBytes)
     return ((uint8_t) sum );
 }
 
+
 /* ************************************************************* */
 /*
- * Look for the sync pulse train, 4 high-low pulses of
+ * Look for the sync pulse train of 4 high-low pulses of
  * 600 uS high and 600 uS low.
  * idx is index of last captured bit duration.
  * Search backwards 8 times looking for 4 pulses
- * approximately 600 uS long.
+ * approximately 600uS long.
  *
  */
 bool isSync(unsigned int idx) 
@@ -587,7 +573,6 @@ bool isSync(unsigned int idx)
 
 
 /* ************************************************************* */
-/* ************************************************************* */
 /* Interrupt  handler 
  * Set to interrupt on edge (level change) high or low transition.
  * Change the state of the Arduino LED on each interrupt. 
@@ -600,27 +585,27 @@ void interrupt_handler()
    volatile static unsigned int syncCount = 0;
    volatile static unsigned int bitState  = 0;
 
-   // Ignore if we haven't finished processing the previous 
-   // received signal in the main loop.
-   if( received == true ) {return;}       // return, we are not finish with processor last block
+   // Ignore this interrupt if we haven't finished processing the previous 
+   // received block in the main loop.
+   if( received == true ) {return;}                     // return, we are not finish with processor last block
 
    bitState = digitalRead (DATAPIN);
-   digitalWrite(MyLED, bitState);         // LED to show receiver activity
+   digitalWrite(MyLED, bitState);                       // LED to show receiver activity
 
    // calculating timing since last change
    long time = micros();
    duration = time - lastTime;
    lastTime = time;
 
-   // Known errors in bit stream are extra --> short and long pulses.
+   // Known errors in bit stream are runt's --> short and long pulses.
    // If we ever get a really short, or really long 
    // pulse's we know there is an error in the bit stream
-   // and we should start over.
+   // and should start over.
    if ( (duration > (PULSE_LONG_NOISE)) || (duration < (PULSE_SHORT_NOISE)) )    // This pulse must be noise...   
    {
       received = false;
       syncFound = false;
-      changeCount = 0;                                  // restart, start looking for data bits again
+      changeCount = 0;                                  // restart, start looking for sync and data bits again
    }
 
    // if we have good data, store data in ring buffer
@@ -631,7 +616,7 @@ void interrupt_handler()
 #ifdef MyDEBUG
       digitalWrite(MyBit, !digitalRead(MyBit) );        // LED to show we have a bit
      // digitalWrite (MyBit, LOW);          
-     // delayMicroseconds (50);
+     // delayMicroseconds (5);
      // digitalWrite (MyBit, HIGH);
 #endif
 
@@ -646,7 +631,7 @@ void interrupt_handler()
 #ifdef MyDEBUG
       digitalWrite(MySync, !digitalRead(MySync) );        // LED to show we have sync
 //      digitalWrite (MySync, LOW);          
-//      delayMicroseconds (50);
+//      delayMicroseconds (5);
 //      digitalWrite (MySync, HIGH);
 #endif    
     }
@@ -655,10 +640,12 @@ void interrupt_handler()
    //  data bit edges in DATABITSEDGES
    if( syncFound )
    {       
-      // not enough bits yet, so no full message block has been received yet
+      // not enough bits yet?, so no full message block has been received yet
       if( changeCount < DATABITSEDGES )            
-        { received = false; }    
-      else      
+        { received = false; }
+      
+      else 
+      
       if( changeCount >= DATABITSEDGES )            // check for too many bits
         {      
           changeCount = DATABITSEDGES;              // lets keep bits we have, checksum will kill this block if bad
@@ -667,12 +654,11 @@ void interrupt_handler()
         }
            
 #ifdef MyDEBUG
-        digitalWrite(MyFrame, !digitalRead(MyFrame) );         // LED to show that we have block
+        digitalWrite(MyFrame, !digitalRead(MyFrame) );         // LED to show that we have full block of data
 //        digitalWrite (MyFrame, LOW); 
-//        delayMicroseconds (100);
+//        delayMicroseconds (50);
 //        digitalWrite (MyFrame, HIGHƒ);
 #endif  
-      
 
     }    // end of if syncFound
 }    // end of interrupt_handler
@@ -700,6 +686,7 @@ void setup()
   Serial.println("");
  
    pinMode(DATAPIN, INPUT);              // data interrupt pin set for input
+   
    pinMode(MyLED, OUTPUT);               // LED output
    digitalWrite (MyLED, LOW);
 
@@ -720,7 +707,7 @@ void setup()
     //digitalWrite (14, LOW);
     pinMode(26, INPUT);         // DIO-0
     pinMode(33, INPUT);         // DIO-1
-    pinMode(32, INPUT);         // DIO-2  This is where we get the RX data --> comnnected to INT-0
+    pinMode(32, INPUT);         // DIO-2  This is where we get the RX data --> comnnected to interrupt pin
     radio.initialize();
     //radio.setBandwidth(OOK_BW_10_4);
     radio.setRSSIThreshold(-70);
@@ -730,9 +717,8 @@ void setup()
     radio.receiveBegin();
 #endif
 
-
 // Setup WiFi
-// WiFi.config(ip, dns, gateway, subnet);
+// WiFi.config(ip, dns, gateway, subnet);   // if using static addressing
 
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
@@ -747,17 +733,19 @@ void setup()
 #ifdef IF_MQTT
   /* configure the MQTT server with IPaddress and port */
   client.setServer(mqtt_server, 1883);
+  
   /* this receivedCallback function will be invoked 
   when client received subscribed topic */
   client.setCallback(receivedCallback);
+  
 #endif    // End of: #ifdef IF_MQTT
 
 
 #ifdef OLED
-// initialize display  
+// initialize the OLED display  
     init_display();     
-    u8x8.setCursor(0,1);
     u8x8.drawString(0, 0,"00592 Decoder");
+    u8x8.setCursor(0,1);
     u8x8.printf("%d.%d.%d.%d",WiFi.localIP()[0], WiFi.localIP()[1], WiFi.localIP()[2], WiFi.localIP()[3] );
 #endif
 
@@ -786,7 +774,7 @@ int convertTimingToBit(unsigned int t0, unsigned int t1)
 
 
 /* ************************************************************* */
-// 0592TX send's a meassge every ~18 sec, so lets average temperature
+// 00592TX send's a meassge every ~18 sec, so lets average temperature
 // over a number of sample, if is greater that our alarm settings, we need to send
 // an alarm, but only once every so many minutes.
 void MaxSensorAAlarm (float temp)
@@ -899,12 +887,14 @@ void MaxSensorCAlarm(float temp)
 /* ************************************************************* */
 void BatteryLowAlarm (int device)
 {
-  if (Batt_Flag == false)                         // see if this is 1st time here for this alarm...
-   {
+  device = (device & 0x02);                                 // only two bits are used
+  if (Batt_Flag == false)                                   // see if this is first time here for this alarm...
+   {                                                        // we should do this for each sensor, but maybe next time
       if (device == 0x03) { snprintf (msg, 50, "Battery Low, Sensor: A"); }
       if (device == 0x02) { snprintf (msg, 50, "Battery Low, Sensor: B"); }
-      if (device == 0x00) { snprintf (msg, 50, "Battery Low, Sensor: C"); } 
-       Serial.println (msg); 
+      if (device == 0x01) { snprintf (msg, 50, "Battery Low, Sensor: Unknown"); } 
+      if (device == 0x00) { snprintf (msg, 50, "Battery Low, Sensor: C"); }
+        Serial.println (msg); 
  
 #ifdef IF_MQTT
       client.publish (BattALARM_TOPIC, msg);
@@ -914,29 +904,32 @@ void BatteryLowAlarm (int device)
      Gsender *gsender = Gsender::Instance();    // Getting pointer to class instance
      
      String subject = "RSF Low Battery Alarm!";
+     
      // We will get message body from msg buffer above
-     if(gsender->Subject(subject)->Send(MySendToAddress, msg)) {    // <------------------ msg fix
-         Serial.println("E-Mail Message sent.");
-     } 
+     if(gsender->Subject(subject)->Send(MySendToAddress, msg)) 
+       { 
+           Serial.println("E-Mail Message sent.");
+       } 
      else 
-     {
-         Serial.print("Error sending message: ");
-         Serial.println(gsender->getError());
-     }
+       {
+           Serial.print("Error sending message: ");
+           Serial.println(gsender->getError());
+       }
 #endif
       Batt_Flag = true;
       LastTimeBatt = Minute;                    // save the current time
    }
   else
-  {
-    if ( Minute >= (LastTimeBatt + BattAlarmTimeToWait ) )  // see if it time to re-send alarm
-          { Batt_Flag = false; }                               // Yes, reset alarm flag
-  }
+    {
+      if ( Minute >= (LastTimeBatt + BattAlarmTimeToWait ) )  // see if it time to re-send alarm
+            { Batt_Flag = false; }                               // Yes, reset alarm flag
+    }
 }
 
 
 /* ************************************************************* */
-int acurite_getHumidity (uint8_t byte) {
+int acurite_getHumidity (uint8_t byte) 
+{
     // range: 1 to 99 %RH
     int humidity = byte & 0x7F;
     return humidity;
@@ -944,7 +937,8 @@ int acurite_getHumidity (uint8_t byte) {
 
 
 /* ************************************************************* */
-float acurite_getTemp_6044M(byte hibyte, byte lobyte) {
+float acurite_getTemp_6044M(byte hibyte, byte lobyte) 
+{
   // range -40 to 158 F, -40º C to 70º C --> returns temp in deg C
   int highbits = (hibyte & 0x0F) << 7;
   int lowbits = lobyte & 0x7F;
@@ -955,18 +949,21 @@ float acurite_getTemp_6044M(byte hibyte, byte lobyte) {
 
 
 /* ************************************************************* */
-float convCF(float c) {
-  return ((c * 1.8) +32);
+float convCF(float c) 
+{
+  return ((c * 1.8) + 32);
 }
 
 
 /* ************************************************************* */
-uint16_t acurite_txr_getSensorId(uint8_t byte){
-    return ((byte & 0xC0) >> 6);
+uint16_t acurite_txr_getSensorId(uint8_t byte)
+{
+    return ((byte & 0xc0) >> 6);
 }
 
 /* ************************************************************* */
-uint16_t acurite_txr_getSensorSN(uint8_t hibyte, uint8_t lobyte){
+uint16_t acurite_txr_getSensorSN(uint8_t hibyte, uint8_t lobyte)
+{
     return ((hibyte & 0x3f) << 8) | lobyte;
 }
 
@@ -974,7 +971,7 @@ uint16_t acurite_txr_getSensorSN(uint8_t hibyte, uint8_t lobyte){
 /* ************************************************************* */
 bool acurite_txr_getBattery(uint8_t byte)
 {
-  if ((dataBytes[byte] & 0x20) == 0x20 )
+  if ((dataBytes[byte] & 0x20) == 0x20 )    // check if battery is low
   { return true; }
   return false;
 }
@@ -997,13 +994,15 @@ void MQTT_Send (void)
            {
             if (temp > AMaxTemp) {AMaxTemp = temp;}                     // lets set new Min-Max
             if (temp < AMinTemp) {AMinTemp = temp;}
+            
             client.publish (ATEMP_TOPIC, msg);
             client.publish (AHUM_TOPIC, msg1);
             snprintf (msg, 10, "%6.2f", AMinTemp);
             client.publish (AMIN_TOPIC, msg);                           // send min temperature              
             snprintf (msg, 10, "%6.2f", AMaxTemp);
-            client.publish (AMAX_TOPIC, msg);                           // send max temperature 
-            if (Battery ) {client.publish (ABATT_TOPIC, "Low Battery"); BatteryLowAlarm (ID);}
+            client.publish (AMAX_TOPIC, msg);                           // send max temperature
+             
+            if (Battery) {client.publish (ABATT_TOPIC, "Low Battery"); BatteryLowAlarm (ID);}
 
             float intTemp = AAVD.CalculateMovingAverage(temp);          // add temp to average calculator
             if (intTemp >= MAX_ATEMP)  { MaxSensorAAlarm(intTemp); }    // do we have an alarm? Yes
@@ -1019,13 +1018,15 @@ void MQTT_Send (void)
            {
             if (temp > BMaxTemp) {BMaxTemp = temp;}                     // lets set new Min-Max
             if (temp < BMinTemp) {BMinTemp = temp;}
+            
             client.publish (BTEMP_TOPIC, msg);
             client.publish (BHUM_TOPIC, msg1);
             snprintf (msg, 10, "%6.2f", BMinTemp);
             client.publish (BMIN_TOPIC, msg);                           // send min temperature              
             snprintf (msg, 10, "%6.2f", BMaxTemp);
-            client.publish (BMAX_TOPIC, msg);                           // send max temperature 
-            if (Battery ) {client.publish (BBATT_TOPIC, "Low Battery"); BatteryLowAlarm (ID);}
+            client.publish (BMAX_TOPIC, msg);                           // send max temperature
+             
+            if (Battery) {client.publish (BBATT_TOPIC, "Low Battery"); BatteryLowAlarm (ID);}
             
             float intTemp = BAVD.CalculateMovingAverage(temp);          // add temp to average calculator
             if (intTemp >= MAX_BTEMP) { MaxSensorBAlarm(intTemp); }     // do we have an alarm? Yes
@@ -1040,13 +1041,15 @@ void MQTT_Send (void)
            {
             if (temp > CMaxTemp) {CMaxTemp = temp;}                     // lets set new Min-Max
             if (temp < CMinTemp) {CMinTemp = temp;}
+            
             client.publish (CTEMP_TOPIC, msg);
             client.publish (CHUM_TOPIC, msg1);
             snprintf (msg, 10, "%6.2f", CMinTemp);
             client.publish (CMIN_TOPIC, msg);                           // send min temperature              
             snprintf (msg, 10, "%6.2f", CMaxTemp);
             client.publish (CMAX_TOPIC, msg);                           // send max temperature
-            if (Battery ) {client.publish (CBATT_TOPIC, "Low Battery"); BatteryLowAlarm (ID);}
+            
+            if (Battery) {client.publish (CBATT_TOPIC, "Low Battery"); BatteryLowAlarm (ID);}
 
             float intTemp = CAVD.CalculateMovingAverage(temp);          // add temp to average calculator
             if (intTemp >= MAX_CTEMP)  { MaxSensorCAlarm(intTemp); }    // do we have an alarm? Yes
@@ -1096,10 +1099,9 @@ void loop()
 
 #ifdef IF_MQTT 
   /* if client was disconnected then try to reconnect again */
-   if (!client.connected()) {
-     mqttconnect();
-   }
-  /* this function will listen for incomming 
+   if (!client.connected()) { mqttconnect(); }
+   
+  /* this function will listen for incomming MQTT
   subscribed topic-process-invoke receivedCallback */
    client.loop();
 #endif  
@@ -1108,7 +1110,7 @@ void loop()
 // lets setup a long duration timer at 1 minute tick
   currentMillis = millis ();                                  // get current time
   if (currentMillis - previousMillis >= interval)
-        {previousMillis = currentMillis; Minute++;}           // add one to minute couter if time..
+        { previousMillis = currentMillis; Minute++; }         // add one to minute couter if time..
 
  
    if( received == true )                                     // check to see if we have a full block of bits to decode
@@ -1116,11 +1118,8 @@ void loop()
       // disable interrupt to avoid new data corrupting the buffer
       detachInterrupt(MyInterrupt);
       
-      // extract temperature value
       unsigned int startIndex, stopIndex, ringIndex;
-      unsigned long temperature = 0;
       bool fail = false;
-
 
 /* ************************************************************* */
 // Print the bit stream for debugging. 
@@ -1139,7 +1138,7 @@ void loop()
       Serial.print("dataIndex = ");
       Serial.println(dataIndex);
 
-      ringIndex = (syncIndex - (SYNCPULSEEDGES-1)) % RING_BUFFER_SIZE;
+      ringIndex = (syncIndex - (SYNCPULSEEDGES-1) ) % RING_BUFFER_SIZE;
 
       for ( int i = 0; i < (SYNCPULSECNT + DATABITSCNT); i++ )
       {
@@ -1162,7 +1161,7 @@ void loop()
 /* ************************************************************* */
 // Build a byte array with the raw data received
 
-      fail = false;                                     // reset bit decode error flag
+      fail = false;                                       // reset bit decode error flag
 
       // clear the data bytes array
       for( int i = 0; i < DATABYTESCNT; i++ )    { dataBytes[i] = 0; }
@@ -1173,8 +1172,8 @@ void loop()
       {
          int bit = convertTimingToBit ( pulseDurations[ringIndex % RING_BUFFER_SIZE], 
                                           pulseDurations[(ringIndex +1 ) % RING_BUFFER_SIZE] );                                                                           
-         if( bit < 0 )                                     // check for a valid bit, ie: 1 or zero, -1 = error
-           { fail = true; break; }                         // exit loop
+         if( bit < 0 )                                    // check for a valid bit, ie: 1 or zero, -1 = error
+           { fail = true; break; }                        // exit loop
          else
            { dataBytes[i/8] |= bit << ( 7 - (i % 8)); }   // pack into a byte       
          ringIndex += 2;
@@ -1209,7 +1208,7 @@ void loop()
 // lets extract data from the sensor
 // all data bytes are now in dataBytes[DATABYTESCNT]
 
-        if (!fail)                                                  // if fail, we decoded some of the bits wrong, so don't process this block
+        if (!fail)                                                  // if fail, we decoded some of the bits are wrong, so don't process this block
         {
           if ( CheckSum (dataBytes, 5) == dataBytes[6] )            // if Check Sum is good... 
           {                   
@@ -1219,10 +1218,10 @@ void loop()
              
 #ifdef MyDEBUG
               Serial.print (Minute);         
-              Serial.print (" Block Error Counter: ");              // Print CRC and Block decode errors counters
+              Serial.print (" Block Error Counter: ");              // Print CS and Block decode errors counters
               Serial.print (BlockFailCounter);
               Serial.print (", CS Error Counter: ");
-              Serial.println (CRCFailCounter);
+              Serial.println (CSFailCounter);
               
 #endif    //  End of MyDEBUG
                         
@@ -1239,7 +1238,7 @@ void loop()
               Serial.print ( " Should be: ");
               Serial.println ( CheckSum (dataBytes, 5) , HEX);     // I know, this is a waist of time to do this again...
 #endif
-              CRCFailCounter++;                                    // if Check Sum is bad, keep count
+              CSFailCounter++;                                    // if Check Sum is bad, keep count
               }
           
         }   // End of if (!fail)...
@@ -1249,7 +1248,7 @@ void loop()
       received = false;
       syncFound = false;
       
-      delay (250);                                                // this will eliminate 2nd block of data if its sent
+      delay (250);                                                // this will eliminate 2nd and 3rd block of data if its sent
       
       // re-enable interrupt
       attachInterrupt (MyInterrupt, interrupt_handler, CHANGE);
@@ -1258,5 +1257,5 @@ void loop()
 
 }   // end of: loop
 
-
+// the very end......
 
