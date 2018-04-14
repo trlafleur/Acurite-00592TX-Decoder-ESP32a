@@ -258,7 +258,7 @@
     #define BTEMP_TOPIC     "RSF/S1/B/Temp"
     #define CTEMP_TOPIC     "RSF/S1/C/Temp"
 
-    #define AHUM_TOPIC      "RSF/S1/B/Hum"                       
+    #define AHUM_TOPIC      "RSF/S1/A/Hum"                       
     #define BHUM_TOPIC      "RSF/S1/B/Hum"
     #define CHUM_TOPIC      "RSF/S1/C/Hum"
     
