@@ -1,5 +1,5 @@
 # Acurite-00592TX-Decoder-ESP32a
-
+~~~
 /**********************************************************************
  * Arduino code to decode the Acurite 00592TX wireless temperature sensor
  *
@@ -157,3 +157,4 @@
  * Tom Lafleur --> tom@lafleur.us
  * 
  */
+~~~
