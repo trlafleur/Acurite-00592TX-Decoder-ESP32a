@@ -94,7 +94,7 @@
  *     Alarms for emperature and Low Battery
  *    
  *  E-Mail:
- *    If enable, alarms are also send via E-mail or SMS, requires MQTT for now
+ *    If enable, alarms are also send via E-mail or SMS
  *     http://www.emailtextmessages.com/
  *  
  *  Integration time for alarms can be set for each sensor.     
@@ -120,6 +120,7 @@
  *  DATE         REV  DESCRIPTION
  *  -----------  ---  ----------------------------------------------------------
  *  13-Apr-2018 1.0g  TRL - First Build
+ *  14-Apr-2018 1.0h  TRL - Now you can have MQTT or E-mail, or both
  *  
  *  Notes:  1)  Tested with Arduino 1.8.5
  *          2)  Testing with a 433Mhz RFM69 
@@ -133,7 +134,7 @@
  *          8)
  *          
  *  Todo:   1) Fix issues with RFM69 receiver, work in progress, not working
- *          2) E-Mail requires MQTT for now
+ *          2) 
  *          3) 
  *          4) 
  *          5) 
@@ -148,10 +149,13 @@
 //#define DISPLAY_DATA_BYTES
 //#define MyDEBUG
 #define IF_MQTT
-#define IF_EMAIL                                          // E-Mail requires MQTT for now
+#define IF_EMAIL
 //#define RFM69
-#define OLED U8X8_SSD1306_128X64_NONAME_HW_I2C            // OLED-Display on board
 
+#define SKETCHNAME    "Started, Acu-Rite 00592TX Decoder, "
+#define SKETCHVERSION "Ver: 1.0h"
+
+#define OLED U8X8_SSD1306_128X64_NONAME_HW_I2C                // OLED-Display on board
 
 // On the Arduino connect the data pin, the pin that will be 
 // toggling with the incomming data from the RF module, to
@@ -163,6 +167,7 @@
 #include <Wire.h>         // http://arduino.cc/en/Reference/Wire ??
 #include "Gsender.h"
 #include "MovingAverage.h"
+#include <PubSubClient.h>
 
 // OLED Display 
 #include <U8g2lib.h>      // https://github.com/olikraus/u8g2
@@ -181,11 +186,11 @@
   #include <esp_wps.h>
   #include <WiFiClientSecure.h>
 #endif
+
 #ifdef ARDUINO_ARCH_ESP8266
   #include <ESP8266WiFi.h>
   #include <WiFiClientSecure.h>
 #endif
-
 
 // Ring buffer size has to be large enough to fit
 // data and sync signal, at least 120
@@ -208,10 +213,6 @@
 #define PULSE_SHORT_NOISE     PULSE_SHORT - PULSE_TOLL      // anything shorter that this is noise
 #define PULSE_LONG_NOISE      SYNC_HIGH + SYNC_TOLL         // anything longer that this is noise
 
-
-#define SKETCHNAME    "Started, Acu-rite 00592TX Decoder, "
-#define SKETCHVERSION "Ver: 1.0g"
-
 // create an instance of WiFi client 
   WiFiClient espClient;
 
@@ -229,15 +230,17 @@
   uint8_t connection_state = 0;                    // Connected to WIFI or not
   uint16_t reconnect_interval = 10000;             // If not connected wait time to try again
   
-#ifdef IF_MQTT
-    #include <PubSubClient.h>
-   
     // MQTT Server IP Address or FQDN
-    const char* mqtt_server = "192.168.167.32";     // <----------- Change This
-  
-    // create an instance of PubSubClient client 
+const char* mqtt_server = "192.168.167.32";         // <----------- Change This
+
+#ifdef IF_MQTT
+// create an instance of PubSubClient
     PubSubClient client(espClient);
-    
+#else
+    // create a null instance of PubSubClient
+    PubSubClient client;
+#endif
+
     // My topics, format header is RSF=Home, S1=Sensor number
     #define ATEMP_TOPIC     "RSF/S1/A/Temp"                                           // <----------- Change These as needed
     #define BTEMP_TOPIC     "RSF/S1/B/Temp"
@@ -265,29 +268,15 @@
     #define CMAX_TOPIC      "RSF/S1/C/MAX"
     
     #define SUBSCRIBE_TOPIC "RSF/S1/+/RESET"
-#endif    // End of: #ifdef IF_MQTT
-
-// Hardware pin definitions for TTGOv1 Board with OLED SSD1306 I2C Display
-#define OLED_RST 16         // ESP32 GPIO16 (Pin16) -- SD1306 Reset
-#define OLED_SCL 15         // ESP32 GPIO15 (Pin15) -- SD1306 Clock
-#define OLED_SDA 4          // ESP32 GPIO4  (Pin4)  -- SD1306 Data
-
-// create an instance for OLED Display
-#ifdef OLED
-    OLED u8x8(OLED_RST, OLED_SCL, OLED_SDA);
-#else
-   U8X8_NULL u8x8;
-#endif
-
 
 // create an instance for Moving Average
   MovingAverage <float> AAVD (60);        // create a moving average over last n values         // <----------- Change These as needed
   MovingAverage <float> BAVD (60);        // 60 * ~18  sec = 1080sec = 18min
   MovingAverage <float> CAVD (60);
 
-  #define MAX_ATEMP     45                // Max temperature for refrigerator, device A           // <----------- Change Theses as needed
-  #define MAX_BTEMP     20                // Max temperature for freezer, device B
-  #define MAX_CTEMP     99                // Max temperature for device C
+  #define MAX_ATEMP     45.0                // Max temperature for refrigerator, device A       // <----------- Change Theses as needed
+  #define MAX_BTEMP     20.0                // Max temperature for freezer, device B
+  #define MAX_CTEMP     99.0                // Max temperature for device C
     
   #define AlarmTimeToWait          120L             // Wait this amount of time for next alarm message, in Minutes  // <----------- Change These as needed
   #define BattAlarmTimeToWait     1440L             // Wait this amount of time for next battery alarm message, in Minutes
@@ -357,6 +346,12 @@ float CMaxTemp = -40;
   #define MyBit             37                // Trigger on bit edge
   #define MyFrame           38                // Trigger at end of frame
 
+  
+  // Hardware pin definitions for TTGOv1 Board with OLED SSD1306 I2C Display
+  #define OLED_RST 16         // ESP32 GPIO16 (Pin16) -- SD1306 Reset
+  #define OLED_SCL 15         // ESP32 GPIO15 (Pin15) -- SD1306 Clock
+  #define OLED_SDA 4          // ESP32 GPIO4  (Pin4)  -- SD1306 Data
+
 
 /* ************************************************************* */
 #elif ARDUINO_ARCH_ESP8266
@@ -373,9 +368,23 @@ float CMaxTemp = -40;
   #define MySync            3                // Trigger on Sync found
   #define MyBit             4                // Trigger on bit edge
   #define MyFrame           5                // Trigger at end of frame
+
+  
+// Hardware pin definitions for OLED SSD1306 I2C Display
+//  #define OLED_RST 16         // ESP32 GPIO16 (Pin16) -- SD1306 Reset
+//  #define OLED_SCL 15         // ESP32 GPIO15 (Pin15) -- SD1306 Clock
+//  #define OLED_SDA 4          // ESP32 GPIO4  (Pin4)  -- SD1306 Data
+
   
 #else
   #error CPU undefined.....
+#endif
+
+// create an instance for OLED Display
+#ifdef OLED
+    OLED u8x8(OLED_RST, OLED_SCL, OLED_SDA);
+#else
+   U8X8_NULL u8x8;
 #endif
 
 
@@ -391,7 +400,6 @@ void init_display(void)
 #endif // OLED
 
 
-#ifdef IF_MQTT
 /* ************************************************************* */
   void receivedCallback(char* topic, byte* payload, unsigned int length) 
   {
@@ -420,7 +428,7 @@ void init_display(void)
 
 /* ************************************************************* */
   void mqttconnect() 
-  {
+{
     /* Loop until reconnected */
     while (!client.connected()) 
     {
@@ -447,9 +455,8 @@ void init_display(void)
         delay(5000);
       }
     }   // End of: while (!client.connected()) 
-  }   // End of:  mqttconnect() 
 
-#endif    // End of: IF_MQTT
+  }   // End of:  mqttconnect() 
 
 
 /* ************************************************************* */
@@ -531,7 +538,21 @@ void PrintHex8(uint8_t *data, uint8_t length)
 }
 
 
-///* ************************************************************* */
+//* ************************************************************* */
+// Prints a byte as binary with leading zero's
+void printBits(byte myByte)
+{
+   for(byte mask = 0x80; mask; mask >>= 1)
+   {
+     if(mask  & myByte)
+         Serial.print('1');
+     else
+         Serial.print('0');
+   }
+}
+
+
+//* ************************************************************* */
 //    Checksum of bits
 uint8_t CheckSum(uint8_t const message[], unsigned nBytes) 
 {
@@ -724,13 +745,12 @@ void setup()
   WiFi.begin(ssid, password);
 
   connection_state = WiFiConnect();
+
   if(!connection_state)                     // if not connected to WIFI
        Awaits();                            // constantly trying to connect
 
     delay (1000);
 
-
-#ifdef IF_MQTT
   /* configure the MQTT server with IPaddress and port */
   client.setServer(mqtt_server, 1883);
   
@@ -738,8 +758,6 @@ void setup()
   when client received subscribed topic */
   client.setCallback(receivedCallback);
   
-#endif    // End of: #ifdef IF_MQTT
-
 
 #ifdef OLED
 // initialize the OLED display  
@@ -780,15 +798,14 @@ int convertTimingToBit(unsigned int t0, unsigned int t1)
 void MaxSensorAAlarm (float temp)
 { 
   if (A_Flag == false)                                      // see if this is 1st time here for this alarm...
-   {
-#ifdef IF_MQTT      
+   { 
       snprintf (msg, 10, "%6.2f", temp);
       client.publish (AALARM_TOPIC, msg);
-#endif
+
 #ifdef IF_EMAIL
      Gsender *gsender = Gsender::Instance();                // Getting pointer to class instance
-     String subject = "RSF Sensor Alarm!";
-     snprintf (msg, 60, "Alarm set at: %6.2fF,  Temperature is: %6.2fF", MAX_ATEMP, temp);
+     String subject = "RSF Sensor Alarm! ID=A";
+     sprintf (msg, "Alarm set at: %6.2fF,  Temperature is: %6.2fF\n", MAX_ATEMP, temp);
      if(gsender->Subject(subject)->Send(MySendToAddress, msg)) 
      {
          Serial.println("E-mail Message sent.");
@@ -817,15 +834,13 @@ void MaxSensorBAlarm(float temp)
 {
   if (B_Flag == false)                                      // see if this is 1st time here for this alarm...
    {
-#ifdef IF_MQTT
       snprintf (msg, 10, "%6.2f", temp);
       client.publish (BALARM_TOPIC, msg);
-#endif
 
 #ifdef IF_EMAIL
      Gsender *gsender = Gsender::Instance();                // Getting pointer to class instance
-     String subject = "RSF Sensor Alarm!";
-     snprintf (msg, 60, "Alarm set at: %6.2fF,  Temperature is: %6.2fF", MAX_BTEMP, temp);
+     String subject = "RSF Sensor Alarm! ID=B";
+     sprintf (msg,  "Alarm set at: %6.2fF,  Temperature is: %6.2fF\n", MAX_BTEMP, temp);
      if(gsender->Subject(subject)->Send(MySendToAddress, msg)) 
      {
          Serial.println("E-Mail Message sent.");
@@ -853,16 +868,13 @@ void MaxSensorCAlarm(float temp)
 {
   if (C_Flag == false)                                      // see if this is 1st time here for this alarm...
    {
-#ifdef IF_MQTT
       snprintf (msg, 10, "%6.2f", temp);
       client.publish (CALARM_TOPIC, msg);
-#endif
-
 
 #ifdef IF_EMAIL
      Gsender *gsender = Gsender::Instance();                // Getting pointer to class instance
-     String subject = "RSF Sensor Alarm!";
-     snprintf (msg, 60, "Alarm set at: %6.2fF,  Temperature is: %6.2fF", MAX_CTEMP, temp);
+     String subject = "RSF Sensor Alarm! ID=C";
+     sprintf (msg, "Alarm set at: %6.2fF,  Temperature is: %6.2fF\n", MAX_CTEMP, temp);
      if(gsender->Subject(subject)->Send(MySendToAddress, msg)) 
      {
          Serial.println("E-Mail Message sent.");
@@ -895,10 +907,9 @@ void BatteryLowAlarm (int device)
       if (device == 0x01) { snprintf (msg, 50, "Battery Low, Sensor: Unknown"); } 
       if (device == 0x00) { snprintf (msg, 50, "Battery Low, Sensor: C"); }
         Serial.println (msg); 
- 
-#ifdef IF_MQTT
+        
       client.publish (BattALARM_TOPIC, msg);
-#endif
+
 
 #ifdef IF_EMAIL
      Gsender *gsender = Gsender::Instance();    // Getting pointer to class instance
@@ -979,88 +990,99 @@ bool acurite_txr_getBattery(uint8_t byte)
 /* ************************************************************* */
 void MQTT_Send (void)
 {
-#ifdef IF_MQTT
-// send sensor ID, A-B-C temperature, humidity, battery status, and alarm status to MQTT server
+// Send sensor ID --> A-B-C temperature, humidity, battery status, and alarm status to MQTT server
 
-           temp = convCF (acurite_getTemp_6044M(dataBytes[4], dataBytes[5]));    // Get sensor values, convert from C to F
+           temp = convCF (acurite_getTemp_6044M(dataBytes[4], dataBytes[5]));    // Get sensor values, and convert from C to F
            hum = acurite_getHumidity (dataBytes[3]);
-           byte ID = acurite_txr_getSensorId(dataBytes[0]);
+           
+           byte ID = acurite_txr_getSensorId(dataBytes[0]);           // Only a 2 bit ID
+           
            bool Battery = acurite_txr_getBattery(dataBytes[4]);
            
-           snprintf (msg,  10, "%6.2f", temp);                         // format them
-           snprintf (msg1, 10, "%d", hum);
+           snprintf (msg,  10, "%6.2f", temp);                         // format temperature message
+           snprintf (msg1, 10, "%d", hum);                             // format humidity message
            
-           if (ID == 0x03)
+           switch (ID)
            {
-            if (temp > AMaxTemp) {AMaxTemp = temp;}                     // lets set new Min-Max
-            if (temp < AMinTemp) {AMinTemp = temp;}
-            
-            client.publish (ATEMP_TOPIC, msg);
-            client.publish (AHUM_TOPIC, msg1);
-            snprintf (msg, 10, "%6.2f", AMinTemp);
-            client.publish (AMIN_TOPIC, msg);                           // send min temperature              
-            snprintf (msg, 10, "%6.2f", AMaxTemp);
-            client.publish (AMAX_TOPIC, msg);                           // send max temperature
-             
-            if (Battery) {client.publish (ABATT_TOPIC, "Low Battery"); BatteryLowAlarm (ID);}
-
-            float intTemp = AAVD.CalculateMovingAverage(temp);          // add temp to average calculator
-            if (intTemp >= MAX_ATEMP)  { MaxSensorAAlarm(intTemp); }    // do we have an alarm? Yes
-              else { A_Flag = false; }                                  // no alarm now
-              
-            u8x8.setCursor(0,3);
-            u8x8.clearLine(3);
-            u8x8.printf("Sensor A:%6.2fF",temp );
-              
-           }
-           
-           if (ID == 0x02)
-           {
-            if (temp > BMaxTemp) {BMaxTemp = temp;}                     // lets set new Min-Max
-            if (temp < BMinTemp) {BMinTemp = temp;}
-            
-            client.publish (BTEMP_TOPIC, msg);
-            client.publish (BHUM_TOPIC, msg1);
-            snprintf (msg, 10, "%6.2f", BMinTemp);
-            client.publish (BMIN_TOPIC, msg);                           // send min temperature              
-            snprintf (msg, 10, "%6.2f", BMaxTemp);
-            client.publish (BMAX_TOPIC, msg);                           // send max temperature
-             
-            if (Battery) {client.publish (BBATT_TOPIC, "Low Battery"); BatteryLowAlarm (ID);}
-            
-            float intTemp = BAVD.CalculateMovingAverage(temp);          // add temp to average calculator
-            if (intTemp >= MAX_BTEMP) { MaxSensorBAlarm(intTemp); }     // do we have an alarm? Yes
-                else { B_Flag = false; }                                // no alarm now
+           case 0x03: // Sensor A
+             {
+                if (temp > AMaxTemp) {AMaxTemp = temp;}                     // lets set new Min-Max
+                if (temp < AMinTemp) {AMinTemp = temp;}
                 
-            u8x8.setCursor(0,5);
-            u8x8.clearLine(5);
-            u8x8.printf("Sensor B:%6.2fF",temp );         
-           }
+                client.publish (ATEMP_TOPIC, msg);
+                client.publish (AHUM_TOPIC, msg1);
+                snprintf (msg, 10, "%6.2f", AMinTemp);
+                client.publish (AMIN_TOPIC, msg);                           // send min temperature              
+                snprintf (msg, 10, "%6.2f", AMaxTemp);
+                client.publish (AMAX_TOPIC, msg);                           // send max temperature
+                 
+                if (Battery) {client.publish (ABATT_TOPIC, "Low Battery"); BatteryLowAlarm (ID);}
+    
+                float intTemp = AAVD.CalculateMovingAverage(temp);          // add temp to average calculator
+                if (intTemp >= MAX_ATEMP)  { MaxSensorAAlarm(intTemp); }    // do we have an alarm? Yes
+                  else { A_Flag = false; }                                  // no alarm now
+                  
+                u8x8.setCursor(0,3);
+                u8x8.clearLine(3);
+                u8x8.printf("Sensor A:%6.2fF",temp );
+                break;
+             }
            
-           if (ID == 0x00)
+           case 0x02:   // Sensor B
+             {
+                if (temp > BMaxTemp) {BMaxTemp = temp;}                     // lets set new Min-Max
+                if (temp < BMinTemp) {BMinTemp = temp;}
+                
+                client.publish (BTEMP_TOPIC, msg);
+                client.publish (BHUM_TOPIC, msg1);
+                snprintf (msg, 10, "%6.2f", BMinTemp);
+                client.publish (BMIN_TOPIC, msg);                           // send min temperature              
+                snprintf (msg, 10, "%6.2f", BMaxTemp);
+                client.publish (BMAX_TOPIC, msg);                           // send max temperature
+                 
+                if (Battery) {client.publish (BBATT_TOPIC, "Low Battery"); BatteryLowAlarm (ID);}
+                
+                float intTemp = BAVD.CalculateMovingAverage(temp);          // add temp to average calculator
+                if (intTemp >= MAX_BTEMP) { MaxSensorBAlarm(intTemp); }     // do we have an alarm? Yes
+                    else { B_Flag = false; }                                // no alarm now
+                    
+                u8x8.setCursor(0,5);
+                u8x8.clearLine(5);
+                u8x8.printf("Sensor B:%6.2fF",temp ); 
+                break;        
+             }
+           
+           case 0x00:   // Sensor C
            {
-            if (temp > CMaxTemp) {CMaxTemp = temp;}                     // lets set new Min-Max
-            if (temp < CMinTemp) {CMinTemp = temp;}
-            
-            client.publish (CTEMP_TOPIC, msg);
-            client.publish (CHUM_TOPIC, msg1);
-            snprintf (msg, 10, "%6.2f", CMinTemp);
-            client.publish (CMIN_TOPIC, msg);                           // send min temperature              
-            snprintf (msg, 10, "%6.2f", CMaxTemp);
-            client.publish (CMAX_TOPIC, msg);                           // send max temperature
-            
-            if (Battery) {client.publish (CBATT_TOPIC, "Low Battery"); BatteryLowAlarm (ID);}
-
-            float intTemp = CAVD.CalculateMovingAverage(temp);          // add temp to average calculator
-            if (intTemp >= MAX_CTEMP)  { MaxSensorCAlarm(intTemp); }    // do we have an alarm? Yes
-              else { A_Flag = false; }                                  // no alarm now
+              if (temp > CMaxTemp) {CMaxTemp = temp;}                     // lets set new Min-Max
+              if (temp < CMinTemp) {CMinTemp = temp;}
               
-            u8x8.setCursor(0,7);
-            u8x8.clearLine(7);
-            u8x8.printf("Sensor C:%6.2fF",temp );
-           }                     
-#endif
-}   // End of MQTTSend
+              client.publish (CTEMP_TOPIC, msg);
+              client.publish (CHUM_TOPIC, msg1);
+              snprintf (msg, 10, "%6.2f", CMinTemp);
+              client.publish (CMIN_TOPIC, msg);                           // send min temperature              
+              snprintf (msg, 10, "%6.2f", CMaxTemp);
+              client.publish (CMAX_TOPIC, msg);                           // send max temperature
+              
+              if (Battery) {client.publish (CBATT_TOPIC, "Low Battery"); BatteryLowAlarm (ID);}
+  
+              float intTemp = CAVD.CalculateMovingAverage(temp);          // add temp to average calculator
+              if (intTemp >= MAX_CTEMP)  { MaxSensorCAlarm(intTemp); }    // do we have an alarm? Yes
+                else { C_Flag = false; }                                  // no alarm now
+                
+              u8x8.setCursor(0,7);
+              u8x8.clearLine(7);
+              u8x8.printf("Sensor C:%6.2fF",temp );
+              break;
+           } 
+
+            default:
+              {
+                Serial.println ("***Got Sensor ID=0, Error");
+                break;
+              }
+           }    // End of: switch...                    
+}   // End of: MQTTSend
 
 
 /* ************************************************************* */
@@ -1068,16 +1090,21 @@ void MQTT_Send (void)
 void decode_Acurite_6044(byte dataBytes[])
 {
   Serial.print("Acurite 06044, ID: ");
+  
   byte ID = acurite_txr_getSensorId(dataBytes[0]);
     if ( ID == 0x3) Serial.print("A");
     if ( ID == 0x2) Serial.print("B");
     if ( ID == 0x0) Serial.print("C");
+    
   Serial.print(", SN: 0x");
   Serial.print(acurite_txr_getSensorSN(dataBytes[0], dataBytes[1]), HEX);
+  
   Serial.print("; Temp - ");
   Serial.print(convCF(acurite_getTemp_6044M(dataBytes[4], dataBytes[5])));
+  
   Serial.print("F; Humidity - ");
   Serial.print(acurite_getHumidity(dataBytes[3]));
+  
   Serial.print("%;");
     if (acurite_txr_getBattery(dataBytes[4]) ) { Serial.println(""); Serial.print("Battery Low"); }
   Serial.println();
@@ -1096,23 +1123,20 @@ void decode_Acurite_6044(byte dataBytes[])
  */
 void loop()
 {
-
-#ifdef IF_MQTT 
+#ifdef IF_MQTT
   /* if client was disconnected then try to reconnect again */
    if (!client.connected()) { mqttconnect(); }
    
   /* this function will listen for incomming MQTT
   subscribed topic-process-invoke receivedCallback */
    client.loop();
-#endif  
-
+#endif
 
 // lets setup a long duration timer at 1 minute tick
   currentMillis = millis ();                                  // get current time
   if (currentMillis - previousMillis >= interval)
         { previousMillis = currentMillis; Minute++; }         // add one to minute couter if time..
 
- 
    if( received == true )                                     // check to see if we have a full block of bits to decode
    {
       // disable interrupt to avoid new data corrupting the buffer
@@ -1195,7 +1219,7 @@ void loop()
   
           for( int i = 0; i < DATABYTESCNT; i++ )
             {
-              Serial.print(dataBytes[i], BIN);
+              printBits(dataBytes[i]);
               Serial.print(",");
             }
           Serial.println("");
