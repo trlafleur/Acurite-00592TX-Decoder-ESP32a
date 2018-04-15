@@ -62,8 +62,8 @@
  *   byte are a unique identifier per device. If you need more that 3 
  *   adding a check by serial number could expand this gateway.
  *   
- * The next byte seems to always be 0x44, for all of
- *   the probes I have tested (a sample of 6 probes).
+ * The next byte is a status byte, normal = 0x44,
+ *   0x84 if battery is low.
  *   
  * The next byte is humidity and is encoded as the
  *   lower 7 bits
