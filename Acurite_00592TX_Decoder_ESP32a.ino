@@ -462,7 +462,8 @@ void init_display(void)
 /* ************************************************************* */
 uint8_t WiFiConnect(const char* nSSID = nullptr, const char* nPassword = nullptr)
 {
-   static uint16_t attempt = 0;
+    static uint32_t attempt = 0;
+   
    WiFi.disconnect(); 
    Serial.print("Connecting WiFi to: ");
    if(nSSID) {
@@ -474,20 +475,28 @@ uint8_t WiFiConnect(const char* nSSID = nullptr, const char* nPassword = nullptr
    }
 
    uint8_t i = 0;
-   while(WiFi.status()!= WL_CONNECTED && i++ < 50)
+   while( (WiFi.status()!= WL_CONNECTED) && (i++ < 50) )     // wait for a connection
    {
-       delay(200);
+       delay(250);
        Serial.print(".");
    }
+   
    ++attempt;
+
+   if (attempt >= 15)                                     // well, we have a problem, lets reboot...
+    {
+      Serial.println ("Unable to connect to WiFi, Rebooting...");
+           ESP.restart();     // <---------------- experiment
+    }
    Serial.println("");
-   if(i == 51) {
+     if(i >= 51)                                          // if we can't make a connection
+     {
        Serial.print("Connection: TIMEOUT on attempt: ");
        Serial.println(attempt);
        WiFi.disconnect(); 
        return false;
-   }
-   Serial.println("Connection: ESTABLISHED");
+     }
+   Serial.println("Connection: ESTABLISHED");             // Ok, all is good, we have a connection
    Serial.print  ("Got IP address: ");
    Serial.println(WiFi.localIP());
    return true;
@@ -506,7 +515,6 @@ void Awaits()
            connection_state = WiFiConnect();
            ts = millis();
        }
-     ESP.restart();     // <---------------- experiment 
    }
 }
 
