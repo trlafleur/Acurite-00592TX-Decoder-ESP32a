@@ -1,4 +1,35 @@
 # Acurite-00592TX-Decoder-ESP32a
+
+I have been testing an Acurite 00986, Refrigerated, Freezer monitor...
+
+I build a decoder for it and discovered that the range once inside a refrigerated is short, as little as 6ft from the transmitter to the receiver. This is also true of Acu-Rite display receiver... so I was disappointed...
+
+Acurite also has a series of outdoor sensor, part numbers: 00592TX or 06002M (or one with an LCD display: 06044.) 
+These sensor are design for outdoor uses and have a range of "330ft" as oppose to "75ft" for the 00989 device.
+They can be order for about $13 each, or in kits with various displays or weather station options.
+They are also AcuRite Environment Systems compatible if needed.
+
+In testing from inside a refrigerated, the range was an easy 50ft...
+
+So I modified my decoder to use these devices. The new decoder support up to 3 channels of these sensors and support MQTT over WiFi for monitoring, and E-mail or SMS messages for alarms.
+
+It can also be use with a small local OLED display... Its based on an ESP32 development board ($10) with an RXB6 receiver ($2), but also works fine with an ESP8266.
+
+The 00986, would TX every 2 min, and that was ok and uses 2x AA batteries. The 00592 device, TX every 18 sec and also uses 2X AA batteries. I'm not sure on battery life on the 00592 at this point, but the TX range was a great improvement and that was my goal..
+
+Current code is on GitHub along with the older 00986 code...
+
+https://github.com/trlafleur/Acurite-00592TX-Decoder-ESP32a
+
+https://www.acurite.com/catalogsearch/result/?q=06044
+
+https://www.acurite.com/kbase/592TXR.html
+
+https://www.acurite.com/kbase/cooking-thermometers/00986_Thermometer.html
+
+So with any luck, I will NEVER again need to be concern with someone leaving the refrigerated or freezer door open and loosing allot of food.
+
+
 ~~~
 /**********************************************************************
  * Arduino code to decode the Acurite 00592TX wireless temperature sensor
