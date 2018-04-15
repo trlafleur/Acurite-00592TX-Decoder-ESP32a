@@ -39,33 +39,18 @@ So with any luck, I will NEVER again need to be concern with someone leaving the
  *  sent approximately every 18 seconds. Their are three sensor
  *  ID's: A, B and C
  *  
- * This device is also known as 00592TX, 06002M and 06044 and 
+ *  This device is also known as 00592TX, 06002M and 06044 and 
  *  as other devices...
  *  
- *  Part of this code is derived from informationthe below listed sites:
- *    https://github.com/yacko1975/WeatherStation
- * Decoding protocol and prototype code from these sources:
- * Ray Wang (Rayshobby LLC) 
- *   http://rayshobby.net/?p=8998
- * Benjamin Larsson (RTL_433) 
- *   https://github.com/merbanan/rtl_433
- * Brad Hunting (Acurite_00592TX_sniffer) 
- *   https://github.com/bhunting/Acurite_00592TX_sniffer
- *      
- * The 00592TX typically only sends one SYNC pulse + DATA stream
- * per temperature reading. Infrequently two sync/data streams
- * are sent during the same transmit window but that seems to 
- * be the exception.
+ * The 00592TX typically sends three SYNC pulse + DATA stream
+ * per temperature reading. 
  * 
  * The 00592TX usually starts the data sync bits right after
  * the RF sync pulses which are random length and polarity.
  *
- * Do not rely on a dead/mark time at the beginning of the 
- * data sync stream.
- *
- * The 00592TX first emits a seemingly random length string of 
+ * The 00592TX first emits a random length string of 
  * random width hi/lo pulses, most like to provide radio
- * radio synchronization.
+ * radio AGC synchronization.
  *
  * The probe then emits 4 data sync pulses of approximately 50% 
  * duty cycle and 1.2 ms period. The sync pulses start with a 
@@ -106,11 +91,11 @@ So with any luck, I will NEVER again need to be concern with someone leaving the
  *   00 = channel C   --> Extra
  *   
  *   The remaining 6 bits of the first byte and the 8 bits of the second
- *   byte are a unique identifier per device. If you need more that 3 devices
+ *   byte are a unique identifier per device. If you need more that 3 
  *   adding a check by serial number could expand this gateway.
  *   
- * The next byte seems to always be 0x44, for all of
- *   the probes I have tested.
+ * The next byte is a status byte, normal = 0x44,
+ *   0x84 if battery is low.
  *   
  * The next byte is humidity and is encoded as the
  *   lower 7 bits
@@ -167,20 +152,21 @@ So with any luck, I will NEVER again need to be concern with someone leaving the
  *  DATE         REV  DESCRIPTION
  *  -----------  ---  ----------------------------------------------------------
  *  13-Apr-2018 1.0g  TRL - First Build
+ *  14-Apr-2018 1.0h  TRL - Now you can have MQTT or E-mail, or both
  *  
  *  Notes:  1)  Tested with Arduino 1.8.5
  *          2)  Testing with a 433Mhz RFM69 
  *                RFM69OOK lib from https://github.com/kobuki/RFM69OOK
  *                DIO2 connected to pin interrupt pin.
- *          3)  Tested with a RXB6 receiver connected to interrupt pin.
+ *          3)  Tested with a RXB6 and Aurel RX-MID receivers
  *          4)  Tested using a TTGO R1 ESP32 module
  *          5)  ESP32 and ESP8266 supported sending data via MQTT and E-Mail
  *          6)  ESP8266 tested with a NodeMCU 1.0
- *          7)  Added E-mail-SMS Support NOTE: You must edit Gsender.h with your info
+ *          7)  Added E-mail-SMS Support NOTE:You must edit Gsender.h with your E-mail info
  *          8)
  *          
  *  Todo:   1) Fix issues with RFM69 receiver, work in progress, not working
- *          2) E-Mail requires MQTT for now
+ *          2) 
  *          3) 
  *          4) 
  *          5) 
