@@ -990,7 +990,7 @@ uint16_t acurite_txr_getSensorSN(uint8_t hibyte, uint8_t lobyte)
 /* ************************************************************* */
 bool acurite_txr_getBattery(uint8_t byte)
 {
-  if ((dataBytes[byte] & 0x20) == 0x20 )    // check if battery is low
+  if ((dataBytes[byte] & 0x80) == 0x80 )    // check if battery is low
   { return true; }
   return false;
 }
@@ -1005,7 +1005,7 @@ void MQTT_Send (void)
            
            byte ID = acurite_txr_getSensorId(dataBytes[0]);           // Only a 2 bit ID
            
-           bool Battery = acurite_txr_getBattery(dataBytes[4]);
+           bool Battery = acurite_txr_getBattery(dataBytes[2]);
            
            snprintf (msg,  10, "%6.2f", temp);                         // format temperature message
            snprintf (msg1, 10, "%d", hum);                             // format humidity message
@@ -1114,7 +1114,7 @@ void decode_Acurite_6044(byte dataBytes[])
   Serial.print(acurite_getHumidity(dataBytes[3]));
   
   Serial.print("%;");
-    if (acurite_txr_getBattery(dataBytes[4]) ) { Serial.println(""); Serial.print("Battery Low"); }
+    if (acurite_txr_getBattery(dataBytes[2]) ) { Serial.println(""); Serial.print("Battery Low"); }
   Serial.println();
 }
 
