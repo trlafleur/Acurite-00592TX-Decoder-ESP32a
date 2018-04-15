@@ -95,7 +95,7 @@ So with any luck, I will NEVER again need to be concern with someone leaving the
  *   adding a check by serial number could expand this gateway.
  *   
  * The next byte is a status byte, normal = 0x44,
- *   0x84 if battery is low.
+ *   0x84 if battery is low. Vbatt < ~2.5v is low battery
  *   
  * The next byte is humidity and is encoded as the
  *   lower 7 bits
@@ -123,7 +123,7 @@ So with any luck, I will NEVER again need to be concern with someone leaving the
  *     
  *  MQTT Data Sent:
  *    Temperature, Min, Max, Humidity and Battery Status for the devices
- *     Alarms for emperature and Low Battery
+ *     Alarms for temperature and Low Battery
  *    
  *  E-Mail:
  *    If enable, alarms are also send via E-mail or SMS
