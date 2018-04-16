@@ -10,18 +10,15 @@
  *  This device is also known as 00592TX, 06002M and 06044 and 
  *  as other devices...
  *  
- * The 00592TX typically sends three SYNC pulse + DATA stream
- * per temperature reading. 
- * 
- * The 00592TX usually starts the data sync bits right after
- * the RF sync pulses which are random length and polarity.
+ * The 00592TX typically sends three blocks of SYNC pulse + DATA stream
+ * per temperature reading. So we have three chance's of decoding a block.
  *
  * The 00592TX first emits a random length string of 
- * random width hi/lo pulses, most like to provide radio
- * radio AGC synchronization.
+ * random width hi/lo pulses, most likeley to provide receiver
+ * AGC synchronization.
  *
- * The probe then emits 4 data sync pulses of approximately 50% 
- * duty cycle and 1.2 ms period. The sync pulses start with a 
+ * The sensor then emits 4 data sync pulses of approximately 50% 
+ * duty cycle and ~1.2 ms period. The sync pulses start with a 
  * high level and continue for 4 high / low pulses.
  *
  * The data bits immediately follow the fourth low of the data
@@ -38,14 +35,13 @@
  * and recording the time in uSec between each edge.
  *
  * 8 measured hi and lo pulses in a row, 4 high and 4 low, of 
- * approximately 600 uSec each constitue a sync stream.
+ * approximately ~600uSec each constitue a sync stream.
  *
  * The remaining 56 bits of data, or 112 edges, are measured
  * and converted to 1s and 0s by checking the high to low
  * pulse times.
  *
  * The first 4 pulses, or 8 edges, are the sync pulses followed
- * by the 56 bits, or 112 edges, of the data pulses.
  *
  * We measure 8 sync edges followed by 112 data edges so the 
  * time capture buffer needs to be at least 120 bytes long.
@@ -59,11 +55,11 @@
  *   00 = channel C   --> Extra
  *   
  *   The remaining 6 bits of the first byte and the 8 bits of the second
- *   byte are a unique identifier per device. If you need more that 3 
+ *   byte are a unique identifier per device. If you need more that 3 sensor
  *   adding a check by serial number could expand this gateway.
  *   
  * The next byte is a status byte, normal = 0x44,
- *   0x84 if battery is low.
+ *   0x84 if battery is low. If Vbatt < ~2.5v, we get a low battery
  *   
  * The next byte is humidity and is encoded as the
  *   lower 7 bits
@@ -82,16 +78,13 @@
  * 
  * The block of data is sent 3 time, we only decode one of the blocks
  *
- *  
- *  MQTT
- *    A message sent to this device by topic: SUBSCRIBE_TOPIC, with a "R"
- *     in the 1st byte will reset all Min/Max settings
- *     
- *    Sensor data is sent to MQTT server if using a ESP32 or ESP8266 processor
- *     
+ *  MQTT:
+ *    If a message is sent to this device by topic: SUBSCRIBE_TOPIC, with a "R"
+ *     in the 1st byte, we will reset all min/max settings
+ *          
  *  MQTT Data Sent:
  *    Temperature, Min, Max, Humidity and Battery Status for the devices
- *     Alarms for emperature and Low Battery
+ *     Alarms for temperature and Low Battery
  *    
  *  E-Mail:
  *    If enable, alarms are also send via E-mail or SMS
@@ -101,11 +94,11 @@
  *  
  *  Radio:
  *   Using an RXB6 or equivalent, connect to 3.3v, gnd and connect dataout
- *    to interrupt pin on CPU.
+ *    to an interrupt pin on CPU.
  *    
  *   RFM69 connect DIO-2 to interrupt pin on CPU.
  *    
- *   Antenna is 17.2cm long at 433MHz
+ *   Antenna is 17.2cm long at 433MHz for a 1/4 wave.
  *  
  * *********************************************************************
  * Ideas on decoding protocol and prototype code from
@@ -121,6 +114,7 @@
  *  -----------  ---  ----------------------------------------------------------
  *  13-Apr-2018 1.0g  TRL - First Build
  *  14-Apr-2018 1.0h  TRL - Now you can have MQTT or E-mail, or both
+ *  15-Apr-2018 1.0i  TRL - Release version
  *  
  *  Notes:  1)  Tested with Arduino 1.8.5
  *          2)  Testing with a 433Mhz RFM69 
@@ -134,7 +128,7 @@
  *          8)
  *          
  *  Todo:   1) Fix issues with RFM69 receiver, work in progress, not working
- *          2) 
+ *          2) Code refactoring and consolidation of functions
  *          3) 
  *          4) 
  *          5) 
@@ -148,7 +142,7 @@
 //#define DISPLAY_BIT_TIMING
 //#define DISPLAY_DATA_BYTES
 //#define MyDEBUG
-#define IF_MQTT
+//#define IF_MQTT
 #define IF_EMAIL
 //#define RFM69
 
@@ -219,10 +213,10 @@
   // WiFi information
   // change it with your ssid-password
   const char* ssid = "MySSID";                    // <----------- Change This
-  const char* password = "MyPass";                // <----------- Change This
+  const char* password = "MyPassWord";            // <----------- Change This
     
 #ifdef IF_EMAIL
-   const char* MySendToAddress = "MyEmail";                                            // <----------- Change This for E-Mail
+   const char* MySendToAddress = "MyEmail";                                 // <----------- Change This for E-Mail
 // const char* MySendToAddress = "MyPhone@vtext.com";                                  // <----------- Change This for SMS
 //      For SMS format, see -->   http://www.emailtextmessages.com/
 #endif
@@ -241,40 +235,46 @@ const char* mqtt_server = "192.168.167.32";         // <----------- Change This
     PubSubClient client;
 #endif
 
-    // My topics, format header is RSF=Home, S1=Sensor number
-    #define ATEMP_TOPIC     "RSF/S1/A/Temp"                                           // <----------- Change These as needed
-    #define BTEMP_TOPIC     "RSF/S1/B/Temp"
-    #define CTEMP_TOPIC     "RSF/S1/C/Temp"
 
-    #define AHUM_TOPIC      "RSF/S1/A/Hum"                       
-    #define BHUM_TOPIC      "RSF/S1/B/Hum"
-    #define CHUM_TOPIC      "RSF/S1/C/Hum"
+// My topics, format header is MyID=Site ID, MySensor=Sensor number       // <----------- Change These as needed
+    #define MyID            "RSF"
+    #define MySensor        "S1"
+
+    #define ATEMP_TOPIC     MyID "/" MySensor  "/A/Temp"    
+    #define BTEMP_TOPIC     MyID "/" MySensor  "/B/Temp"
+    #define CTEMP_TOPIC     MyID "/" MySensor  "/C/Temp"
+
+    #define AHUM_TOPIC      MyID "/" MySensor  "/A/Hum"                       
+    #define BHUM_TOPIC      MyID "/" MySensor  "/B/Hum"
+    #define CHUM_TOPIC      MyID "/" MySensor  "/C/Hum"
     
-    #define ABATT_TOPIC     "RSF/S1/A/BATT"
-    #define BBATT_TOPIC     "RSF/S1/B/BATT"
-    #define CBATT_TOPIC     "RSF/S1/C/BATT"
+    #define ABATT_TOPIC     MyID "/" MySensor  "/A/BATT"
+    #define BBATT_TOPIC     MyID "/" MySensor  "/B/BATT"
+    #define CBATT_TOPIC     MyID "/" MySensor  "/C/BATT"
     
-    #define AALARM_TOPIC    "RSF/S1/A/ALARM"
-    #define BALARM_TOPIC    "RSF/S1/B/ALARM"
-    #define CALARM_TOPIC    "RSF/S1/C/ALARM"
+    #define AALARM_TOPIC    MyID "/" MySensor  "/A/ALARM"
+    #define BALARM_TOPIC    MyID "/" MySensor  "/B/ALARM"
+    #define CALARM_TOPIC    MyID "/" MySensor  "/C/ALARM"
     
-    #define BattALARM_TOPIC "RSF/S1/BATT/ALARM"
+    #define AMIN_TOPIC      MyID "/" MySensor  "/A/MIN"
+    #define AMAX_TOPIC      MyID "/" MySensor  "/A/MAX"
     
-    #define AMIN_TOPIC      "RSF/S1/A/MIN"
-    #define AMAX_TOPIC      "RSF/S1/A/MAX"
-    #define BMIN_TOPIC      "RSF/S1/B/MIN"
-    #define BMAX_TOPIC      "RSF/S1/B/MAX"
-    #define CMIN_TOPIC      "RSF/S1/C/MIN"
-    #define CMAX_TOPIC      "RSF/S1/C/MAX"
+    #define BMIN_TOPIC      MyID "/" MySensor  "/B/MIN"
+    #define BMAX_TOPIC      MyID "/" MySensor  "/B/MAX"
     
-    #define SUBSCRIBE_TOPIC "RSF/S1/+/RESET"
+    #define CMIN_TOPIC      MyID "/" MySensor  "/C/MIN"
+    #define CMAX_TOPIC      MyID "/" MySensor  "/C/MAX"
+  
+    #define BattALARM_TOPIC MyID "/" MySensor  "/BATT/ALARM"
+    
+    #define SUBSCRIBE_TOPIC MyID "/" MySensor  "/+/RESET"
 
 // create an instance for Moving Average
-  MovingAverage <float> AAVD (60);        // create a moving average over last n values         // <----------- Change These as needed
-  MovingAverage <float> BAVD (60);        // 60 * ~18  sec = 1080sec = 18min
+  MovingAverage <float> AAVD (60);          // create a moving average over last n values to trigger an alarm        // <----------- Change These as needed
+  MovingAverage <float> BAVD (60);          // 60 * ~18  sec = 1080sec = 18min
   MovingAverage <float> CAVD (60);
 
-  #define MAX_ATEMP     45.0                // Max temperature for refrigerator, device A       // <----------- Change Theses as needed
+  #define MAX_ATEMP     45.0                // Max temperature for refrigerator, device A                            // <----------- Change These as needed
   #define MAX_BTEMP     20.0                // Max temperature for freezer, device B
   #define MAX_CTEMP     99.0                // Max temperature for device C
     
@@ -339,7 +339,7 @@ float CMaxTemp = -40;
   byte interruptPin = DATAPIN;
   #define MyInterrupt (digitalPinToInterrupt(interruptPin))
   
-  #define MyLED             2
+  #define MyLED             2                 // TTOG V1
   
   // define below are use in debug as trigers to logic analyzer
   #define MySync            36                // Trigger on Sync found
@@ -462,7 +462,7 @@ void init_display(void)
 /* ************************************************************* */
 uint8_t WiFiConnect(const char* nSSID = nullptr, const char* nPassword = nullptr)
 {
-    static uint32_t attempt = 0;
+   static uint32_t attempt = 0;
    
    WiFi.disconnect(); 
    Serial.print("Connecting WiFi to: ");
@@ -483,11 +483,12 @@ uint8_t WiFiConnect(const char* nSSID = nullptr, const char* nPassword = nullptr
    
    ++attempt;
 
-   if (attempt >= 15)                                     // well, we have a problem, lets reboot...
+   if (attempt >= 15)                                       // well, we have a problem, lets reboot...
     {
       Serial.println ("Unable to connect to WiFi, Rebooting...");
            ESP.restart();     // <---------------- experiment
     }
+    
    Serial.println("");
      if(i >= 51)                                          // if we can't make a connection
      {
@@ -503,13 +504,14 @@ uint8_t WiFiConnect(const char* nSSID = nullptr, const char* nPassword = nullptr
 }
 
 
+
 /* ************************************************************* */
 void Awaits()
 {
    uint32_t ts = millis();
    while(!connection_state)
    {
-       delay(200);
+       delay(250);
        if(millis() > (ts + reconnect_interval) && !connection_state)
        {
            connection_state = WiFiConnect();
@@ -802,7 +804,8 @@ int convertTimingToBit(unsigned int t0, unsigned int t1)
 /* ************************************************************* */
 // 00592TX send's a meassge every ~18 sec, so lets average temperature
 // over a number of sample, if is greater that our alarm settings, we need to send
-// an alarm, but only once every so many minutes.
+// an alarm, but only once every so many minutes. We donot want to send
+// an alert on a peak reading.
 void MaxSensorAAlarm (float temp)
 { 
   if (A_Flag == false)                                      // see if this is 1st time here for this alarm...
@@ -812,14 +815,14 @@ void MaxSensorAAlarm (float temp)
 
 #ifdef IF_EMAIL
      Gsender *gsender = Gsender::Instance();                // Getting pointer to class instance
-     String subject = "RSF Sensor Alarm! ID=A";
+     sprintf (msg1, "%s %s Sensor Alarm! ID=A", MyID, MySensor);
      sprintf (msg, "Alarm set at: %6.2fF,  Temperature is: %6.2fF\n", MAX_ATEMP, temp);
-     if(gsender->Subject(subject)->Send(MySendToAddress, msg)) 
+     if(gsender->Subject(msg1)->Send(MySendToAddress, msg)) 
      {
          Serial.println("E-mail Message sent.");
      } else 
      {
-         Serial.print("Error, sending message: ");
+         Serial.print("E-Mail, Error, sending message: ");
          Serial.println(gsender->getError());
      }
 
@@ -847,14 +850,14 @@ void MaxSensorBAlarm(float temp)
 
 #ifdef IF_EMAIL
      Gsender *gsender = Gsender::Instance();                // Getting pointer to class instance
-     String subject = "RSF Sensor Alarm! ID=B";
+     sprintf (msg1, "%s %s Sensor Alarm! ID=B", MyID, MySensor);
      sprintf (msg,  "Alarm set at: %6.2fF,  Temperature is: %6.2fF\n", MAX_BTEMP, temp);
-     if(gsender->Subject(subject)->Send(MySendToAddress, msg)) 
+     if(gsender->Subject(msg1)->Send(MySendToAddress, msg)) 
      {
          Serial.println("E-Mail Message sent.");
      } else 
      {
-         Serial.print("Error sending message: ");
+         Serial.print("E-Mail, Error sending message: ");
          Serial.println(gsender->getError());
      }
 
@@ -881,14 +884,14 @@ void MaxSensorCAlarm(float temp)
 
 #ifdef IF_EMAIL
      Gsender *gsender = Gsender::Instance();                // Getting pointer to class instance
-     String subject = "RSF Sensor Alarm! ID=C";
+     sprintf (msg1, "%s %s Sensor Alarm! ID=C", MyID, MySensor);
      sprintf (msg, "Alarm set at: %6.2fF,  Temperature is: %6.2fF\n", MAX_CTEMP, temp);
-     if(gsender->Subject(subject)->Send(MySendToAddress, msg)) 
+     if(gsender->Subject(msg1)->Send(MySendToAddress, msg)) 
      {
          Serial.println("E-Mail Message sent.");
      } else 
      {
-         Serial.print("Error sending message: ");
+         Serial.print("E-Mail, Error sending message: ");
          Serial.println(gsender->getError());
      }
 
@@ -922,10 +925,9 @@ void BatteryLowAlarm (int device)
 #ifdef IF_EMAIL
      Gsender *gsender = Gsender::Instance();    // Getting pointer to class instance
      
-     String subject = "RSF Low Battery Alarm!";
-     
+     sprintf (msg1, "%s %s Sensor Low Battery Alarm!", MyID, MySensor);
      // We will get message body from msg buffer above
-     if(gsender->Subject(subject)->Send(MySendToAddress, msg)) 
+     if(gsender->Subject(msg1)->Send(MySendToAddress, msg))
        { 
            Serial.println("E-Mail Message sent.");
        } 
@@ -936,12 +938,12 @@ void BatteryLowAlarm (int device)
        }
 #endif
       Batt_Flag = true;
-      LastTimeBatt = Minute;                    // save the current time
+      LastTimeBatt = Minute;                                  // save the current time
    }
   else
     {
       if ( Minute >= (LastTimeBatt + BattAlarmTimeToWait ) )  // see if it time to re-send alarm
-            { Batt_Flag = false; }                               // Yes, reset alarm flag
+            { Batt_Flag = false; }                            // Yes, reset alarm flag
     }
 }
 
@@ -988,10 +990,10 @@ uint16_t acurite_txr_getSensorSN(uint8_t hibyte, uint8_t lobyte)
 
 
 /* ************************************************************* */
-bool acurite_txr_getBattery(uint8_t byte)
+bool acurite_txr_getBattery(uint8_t battery)
 {
-  if ((dataBytes[byte] & 0x80) == 0x80 )    // check if battery is low
-  { return true; }
+  if ( (battery & 0x80) == 0x80 )     // check if battery is low
+      { return true; }                // Yes, its low
   return false;
 }
 
@@ -1003,18 +1005,17 @@ void MQTT_Send (void)
            temp = convCF (acurite_getTemp_6044M(dataBytes[4], dataBytes[5]));    // Get sensor values, and convert from C to F
            hum = acurite_getHumidity (dataBytes[3]);
            
-           byte ID = acurite_txr_getSensorId(dataBytes[0]);           // Only a 2 bit ID
-           
+           byte ID = acurite_txr_getSensorId(dataBytes[0]);               // Only a 2 bit ID
            bool Battery = acurite_txr_getBattery(dataBytes[2]);
            
-           snprintf (msg,  10, "%6.2f", temp);                         // format temperature message
-           snprintf (msg1, 10, "%d", hum);                             // format humidity message
+           snprintf (msg,  10, "%6.2f", temp);                            // format temperature message
+           snprintf (msg1, 10, "%d", hum);                                // format humidity message
            
            switch (ID)
            {
            case 0x03: // Sensor A
              {
-                if (temp > AMaxTemp) {AMaxTemp = temp;}                     // lets set new Min-Max
+                if (temp > AMaxTemp) {AMaxTemp = temp;}                    // lets set new Min-Max
                 if (temp < AMinTemp) {AMinTemp = temp;}
                 
                 client.publish (ATEMP_TOPIC, msg);
@@ -1026,9 +1027,9 @@ void MQTT_Send (void)
                  
                 if (Battery) {client.publish (ABATT_TOPIC, "Low Battery"); BatteryLowAlarm (ID);}
     
-                float intTemp = AAVD.CalculateMovingAverage(temp);          // add temp to average calculator
+                float intTemp = AAVD.CalculateMovingAverage(temp);          // add temp to moving average calculator
                 if (intTemp >= MAX_ATEMP)  { MaxSensorAAlarm(intTemp); }    // do we have an alarm? Yes
-                  else { A_Flag = false; }                                  // no alarm now
+                  else { A_Flag = false; }                                  // no, alarm now
                   
                 u8x8.setCursor(0,3);
                 u8x8.clearLine(3);
@@ -1083,7 +1084,6 @@ void MQTT_Send (void)
               u8x8.printf("Sensor C:%6.2fF",temp );
               break;
            } 
-
             default:
               {
                 Serial.println ("***Got Sensor ID=0, Error");
@@ -1100,6 +1100,7 @@ void decode_Acurite_6044(byte dataBytes[])
   Serial.print("Acurite 06044, ID: ");
   
   byte ID = acurite_txr_getSensorId(dataBytes[0]);
+
     if ( ID == 0x3) Serial.print("A");
     if ( ID == 0x2) Serial.print("B");
     if ( ID == 0x0) Serial.print("C");
@@ -1116,6 +1117,7 @@ void decode_Acurite_6044(byte dataBytes[])
   Serial.print("%;");
     if (acurite_txr_getBattery(dataBytes[2]) ) { Serial.println(""); Serial.print("Battery Low"); }
   Serial.println();
+
 }
 
 
