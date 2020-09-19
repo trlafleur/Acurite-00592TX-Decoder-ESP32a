@@ -4,7 +4,7 @@
  *
  * The 00592TX wireless temperature probe contains a 433.92 MHz
  *  wireless transmitter. The temperature from the sensor is
- *  sent approximately every 18 seconds. Their are three sensor
+ *  sent approximately every 18 seconds. There are three sensor
  *  ID's: A, B and C
  *  
  *  This device is also known as 00592TX, 06002M and 06044 and 
@@ -14,7 +14,7 @@
  * per temperature reading. So we have three chance's of decoding a block.
  *
  * The 00592TX first emits a random length string of 
- * random width hi/lo pulses, most likeley to provide receiver
+ * random width hi/lo pulses, most likely to provide receiver
  * AGC synchronization.
  *
  * The sensor then emits 4 data sync pulses of approximately 50% 
@@ -66,7 +66,7 @@
  *   
  * The next two bytes are the temperature. The temperature is encoded as the
  *   lower 7 bits of both bytes with the most significant bit being an
- *   even parity bit.  The MSB will be set if required to insure an even
+ *   even parity bit.  The MSB will be set if required to ensure an even
  *   number of bits are set to 1 in the byte. If the least significant
  *   seven bits have an even number of 1 bits set the MSB will be 0,
  *   otherwise the MSB will be set to 1 to insure an even number of bits.
@@ -87,13 +87,13 @@
  *     Alarms for temperature and Low Battery
  *    
  *  E-Mail:
- *    If enable, alarms are also send via E-mail or SMS
+ *    If enabled, alarms are also send via E-mail or SMS
  *     http://www.emailtextmessages.com/
  *  
  *  Integration time for alarms can be set for each sensor.     
  *  
  *  Radio:
- *   Using an RXB6 or equivalent, connect to 3.3v, gnd and connect dataout
+ *   Using an RXB6 or equivalent, connect to 3.3v, GND and connect dataout
  *    to an interrupt pin on CPU.
  *    
  *   RFM69 connect DIO-2 to interrupt pin on CPU.
@@ -115,7 +115,8 @@
  *  13-Apr-2018 1.0g  TRL - First Build
  *  14-Apr-2018 1.0h  TRL - Now you can have MQTT or E-mail, or both
  *  15-Apr-2018 1.0i  TRL - Release version
- *  
+ *  18-SEP-2020 1.0j  VLO - bugfix for updated ESP SDK vloschiavo@gmail.com
+ *
  *  Notes:  1)  Tested with Arduino 1.8.5
  *          2)  Testing with a 433Mhz RFM69 
  *                RFM69OOK lib from https://github.com/kobuki/RFM69OOK
@@ -125,7 +126,7 @@
  *          5)  ESP32 and ESP8266 supported sending data via MQTT and E-Mail
  *          6)  ESP8266 tested with a NodeMCU 1.0
  *          7)  Added E-mail-SMS Support NOTE:You must edit Gsender.h with your E-mail info
- *          8)
+ *          8)  Interrupt syntax updated to account for new enforcement of IRAM
  *          
  *  Todo:   1) Fix issues with RFM69 receiver, work in progress, not working
  *          2) Code refactoring and consolidation of functions
@@ -147,12 +148,12 @@
 //#define RFM69
 
 #define SKETCHNAME    "Started, Acu-Rite 00592TX Decoder, "
-#define SKETCHVERSION "Ver: 1.0h"
+#define SKETCHVERSION "Ver: 1.0j"
 
 #define OLED U8X8_SSD1306_128X64_NONAME_HW_I2C                // OLED-Display on board
 
 // On the Arduino connect the data pin, the pin that will be 
-// toggling with the incomming data from the RF module, to
+// toggling with the incoming data from the RF module, to
 // a pin that can be configured for interrupt 
 // on change, change to high or low.
 
@@ -360,11 +361,11 @@ float CMaxTemp = -40;
   byte interruptPin = DATAPIN;
   #define MyInterrupt (digitalPinToInterrupt(interruptPin))
  
-  // Note: their are two LED on the NodeMCU Rev1 board
+  // Note: there are two LEDs on the NodeMCU Rev1 board
   // D0-->16 on the board and D4-->2 on the ESP12 that is connected to U1-TXD
   #define MyLED             16
   
-  // define below are use in debug as trigers to logic analyzer
+  // define below are used in debug as trigers to logic analyzer
   #define MySync            3                // Trigger on Sync found
   #define MyBit             4                // Trigger on bit edge
   #define MyFrame           5                // Trigger at end of frame
@@ -483,7 +484,7 @@ uint8_t WiFiConnect(const char* nSSID = nullptr, const char* nPassword = nullptr
    
    ++attempt;
 
-   if (attempt >= 15)                                       // well, we have a problem, lets reboot...
+   if (attempt >= 15)                                       // well, we have a problem, let's reboot...
     {
       Serial.println ("Unable to connect to WiFi, Rebooting...");
            ESP.restart();     // <---------------- experiment
@@ -608,7 +609,7 @@ bool isSync(unsigned int idx)
  * Set to interrupt on edge (level change) high or low transition.
  * Change the state of the Arduino LED on each interrupt. 
  */
-void interrupt_handler() 
+void ICACHE_RAM_ATTR interrupt_handler() 
 {
    volatile static unsigned long duration = 0;
    volatile static unsigned long lastTime = 0;
@@ -628,9 +629,9 @@ void interrupt_handler()
    duration = time - lastTime;
    lastTime = time;
 
-   // Known errors in bit stream are runt's --> short and long pulses.
+   // Known errors in bit stream are runts --> short and long pulses.
    // If we ever get a really short, or really long 
-   // pulse's we know there is an error in the bit stream
+   // pulses we know there is an error in the bit stream
    // and should start over.
    if ( (duration > (PULSE_LONG_NOISE)) || (duration < (PULSE_SHORT_NOISE)) )    // This pulse must be noise...   
    {
@@ -679,7 +680,7 @@ void interrupt_handler()
       
       if( changeCount >= DATABITSEDGES )            // check for too many bits
         {      
-          changeCount = DATABITSEDGES;              // lets keep bits we have, checksum will kill this block if bad
+          changeCount = DATABITSEDGES;              // let's keep bits we have, checksum will kill this block if bad
           detachInterrupt(MyInterrupt);             // disable interrupt to avoid new data corrupting the buffer
           received = true;   
         }
@@ -802,9 +803,9 @@ int convertTimingToBit(unsigned int t0, unsigned int t1)
 
 
 /* ************************************************************* */
-// 00592TX send's a meassge every ~18 sec, so lets average temperature
-// over a number of sample, if is greater that our alarm settings, we need to send
-// an alarm, but only once every so many minutes. We donot want to send
+// 00592TX sends a message every ~18 sec, so let's average temperature
+// over a number of samples.  If it's greater than our alarm settings, we need to send
+// an alarm, but only once every so many minutes. We do not want to send
 // an alert on a peak reading.
 void MaxSensorAAlarm (float temp)
 { 
@@ -868,7 +869,7 @@ void MaxSensorBAlarm(float temp)
    }
   else
   {
-    if ( Minute >= (LastTimeB + AlarmTimeToWait ) )         // see if it time to re-send alarm
+    if ( Minute >= (LastTimeB + AlarmTimeToWait ) )         // see if it is time to re-send alarm
       { B_Flag = false; }                                   // Yes, reset alarm flag
   }
 }
@@ -902,7 +903,7 @@ void MaxSensorCAlarm(float temp)
    }
   else
   {
-    if ( Minute >= (LastTimeC + AlarmTimeToWait ) )         // see if it time to re-send alarm
+    if ( Minute >= (LastTimeC + AlarmTimeToWait ) )         // see if it is time to re-send alarm
       { C_Flag = false; }                                   // Yes, reset alarm flag
   }
 }
@@ -942,7 +943,7 @@ void BatteryLowAlarm (int device)
    }
   else
     {
-      if ( Minute >= (LastTimeBatt + BattAlarmTimeToWait ) )  // see if it time to re-send alarm
+      if ( Minute >= (LastTimeBatt + BattAlarmTimeToWait ) )  // see if it's time to re-send alarm
             { Batt_Flag = false; }                            // Yes, reset alarm flag
     }
 }
@@ -993,7 +994,7 @@ uint16_t acurite_txr_getSensorSN(uint8_t hibyte, uint8_t lobyte)
 bool acurite_txr_getBattery(uint8_t battery)
 {
   if ( (battery & 0x80) == 0x80 )     // check if battery is low
-      { return true; }                // Yes, its low
+      { return true; }                // Yes, it's low
   return false;
 }
 
@@ -1015,7 +1016,7 @@ void MQTT_Send (void)
            {
            case 0x03: // Sensor A
              {
-                if (temp > AMaxTemp) {AMaxTemp = temp;}                    // lets set new Min-Max
+                if (temp > AMaxTemp) {AMaxTemp = temp;}                    // let's set new Min-Max
                 if (temp < AMinTemp) {AMinTemp = temp;}
                 
                 client.publish (ATEMP_TOPIC, msg);
@@ -1063,7 +1064,7 @@ void MQTT_Send (void)
            
            case 0x00:   // Sensor C
            {
-              if (temp > CMaxTemp) {CMaxTemp = temp;}                     // lets set new Min-Max
+              if (temp > CMaxTemp) {CMaxTemp = temp;}                     // let's set new Min-Max
               if (temp < CMinTemp) {CMinTemp = temp;}
               
               client.publish (CTEMP_TOPIC, msg);
@@ -1142,10 +1143,10 @@ void loop()
    client.loop();
 #endif
 
-// lets setup a long duration timer at 1 minute tick
+// let's setup a long duration timer at 1 minute tick
   currentMillis = millis ();                                  // get current time
   if (currentMillis - previousMillis >= interval)
-        { previousMillis = currentMillis; Minute++; }         // add one to minute couter if time..
+        { previousMillis = currentMillis; Minute++; }         // add one to minute counter if time..
 
    if( received == true )                                     // check to see if we have a full block of bits to decode
    {
@@ -1239,12 +1240,12 @@ void loop()
 
 
 /* ************************************************************* */
-// lets extract data from the sensor
+// let's extract data from the sensor
 // all data bytes are now in dataBytes[DATABYTESCNT]
 
         if (!fail)                                                  // if fail, we decoded some of the bits are wrong, so don't process this block
         {
-          if ( CheckSum (dataBytes, 5) == dataBytes[6] )            // if Check Sum is good... 
+          if ( CheckSum (dataBytes, 5) == dataBytes[6] )            // if Checksum is good... 
           {                   
               Serial.print(Minute);                                 // Time stamp for display
               Serial.print(" ");   
@@ -1266,13 +1267,13 @@ void loop()
           else  
             {              
 #ifdef MyDEBUG
-              Serial.print (Minute);                               // Print Check Sum information
+              Serial.print (Minute);                               // Print Checksum information
               Serial.print ( " CS: is: ");
               Serial.print ( dataBytes[6], HEX );
               Serial.print ( " Should be: ");
               Serial.println ( CheckSum (dataBytes, 5) , HEX);     // I know, this is a waist of time to do this again...
 #endif
-              CSFailCounter++;                                    // if Check Sum is bad, keep count
+              CSFailCounter++;                                    // if Checksum is bad, keep count
               }
           
         }   // End of if (!fail)...
@@ -1282,7 +1283,7 @@ void loop()
       received = false;
       syncFound = false;
       
-      delay (250);                                                // this will eliminate 2nd and 3rd block of data if its sent
+      delay (250);                                                // this will eliminate 2nd and 3rd block of data if it's sent
       
       // re-enable interrupt
       attachInterrupt (MyInterrupt, interrupt_handler, CHANGE);
@@ -1292,4 +1293,3 @@ void loop()
 }   // end of: loop
 
 // the very end......
-
